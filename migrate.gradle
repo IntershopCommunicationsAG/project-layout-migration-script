@@ -1,0 +1,142 @@
+final def JAVASOURCE_FOLDER = 'javasource'
+
+// required for preventing svn: E155004 - errors
+gradle.startParameter.maxWorkerCount = 1
+
+allprojects { prj ->
+
+    def migrateFiles_main_java = task('migrateFiles_main_java') {
+        def target = 'src/main/java'
+
+        def files = prj.fileTree JAVASOURCE_FOLDER, {
+            include '**/*'
+            exclude 'tests/com/**/*'
+        }
+
+        doLast() {
+            migrateFiles prj, files, target
+        }
+    }
+
+
+    def migrateFiles_main_resources = task('migrateFiles_main_resources') {
+        def target = 'src/main/resources'
+
+        def files = prj.fileTree "$JAVASOURCE_FOLDER/resources", {
+            include '**/*'
+        }
+
+        doLast() {
+            migrateFiles prj, files, target
+        }
+    }
+
+
+    def migrateFiles_test_java = task('migrateFiles_test_java') {
+        def target = 'src/test/java'
+
+        def files = prj.fileTree "$JAVASOURCE_FOLDER/tests", {
+            include 'com/**/*'
+        }
+
+        doLast() {
+            migrateFiles prj, files, target
+
+            FileTree testFiles = prj.fileTree target, {
+                include '**/*.java'
+            }
+
+            replaceToken testFiles.files, /import\s+tests\.com\./,  'import com.'
+            replaceToken testFiles.files, /package\s+tests\.com\./, 'package com.'
+        }
+    }
+
+
+    def migrate = task('migrate') {
+        onlyIf {new File(prj.projectDir, JAVASOURCE_FOLDER).exists()}
+
+        doLast() {
+            prj.fileTree(JAVASOURCE_FOLDER).visit { FileTreeElement fte ->
+                if(!fte.isDirectory())
+                    throw new GradleException("some files still not migrated. i.e: ${fte.relativePath}")
+            }
+
+            deleteFiles prj, JAVASOURCE_FOLDER
+        }
+    }
+
+    migrateFiles_main_java.dependsOn      migrateFiles_main_resources
+    migrateFiles_main_resources.dependsOn migrateFiles_test_java
+
+    migrate.dependsOn migrateFiles_main_java
+    migrate.dependsOn migrateFiles_main_resources
+    migrate.dependsOn migrateFiles_test_java
+}
+
+
+
+def migrateFiles(Project prj, files, target) {
+    files.visit { FileTreeElement fte ->
+        if (!fte.isDirectory() || fte.file.listFiles().length == 0) {
+
+            def source = fte.file.absolutePath
+                    .replace(prj.projectDir.absolutePath + File.separator, '')
+                    .replace(File.separator, '/')
+
+            def dest = "$target/${fte.relativePath.pathString}"
+
+            moveFiles prj, source, dest
+        }
+    }
+}
+
+
+def moveFiles(Project prj, source, dest) {
+
+    if (prj.hasProperty('MOCK_SCM')) {
+        prj.copy {
+            from source
+            into dest
+        }
+        prj.delete source
+    } else {
+        prj.exec {
+            if (System.getProperty('os.name').toLowerCase().contains('windows')) {
+                commandLine 'cmd', '/c', 'svn', 'move', '--parents', source, dest
+            } else {
+                commandLine 'sh', '-c', 'svn', 'move', '--parents', source, dest
+            }
+        }
+    }
+}
+
+
+def deleteFiles(Project prj, path) {
+    if (prj.hasProperty('MOCK_SCM')) {
+        prj.delete path
+    } else {
+        prj.exec {
+            if (System.getProperty('os.name').toLowerCase().contains('windows')) {
+                commandLine 'cmd', '/c', 'svn', 'delete', path
+            } else {
+                commandLine 'sh', '-c', 'svn', 'delete', path
+            }
+        }
+    }
+}
+
+
+def replaceToken(Set<File> files, def pattern, def replaceWith) {
+    files.each {f ->
+
+        def content = f.text
+                .replaceAll(pattern, replaceWith)
+                .replaceAll(pattern, replaceWith)
+
+        f.write content
+    }
+}
+
+
+
+
