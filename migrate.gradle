@@ -5,7 +5,7 @@ gradle.startParameter.maxWorkerCount = 1
 
 allprojects { prj ->
 
-    def migrateFiles_main_java = task('migrateFiles_main_java') {
+    def migrate_main_java = task('migrate_main_java') {
         def target = 'src/main/java'
 
         def files = prj.fileTree JAVASOURCE_FOLDER, {
@@ -14,25 +14,30 @@ allprojects { prj ->
         }
 
         doLast() {
-            migrateFiles prj, files, target
+            moveFiles prj, files, target
         }
     }
 
 
-    def migrateFiles_main_resources = task('migrateFiles_main_resources') {
-        def target = 'src/main/resources'
+    def migrate_main_resources = task('migrate_main_resources') {
+        def target = 'src/main/resources/resources'
 
-        def files = prj.fileTree "$JAVASOURCE_FOLDER/resources", {
-            include '**/*'
-        }
+        def files = prj.name.endsWith('_test') ?
+                prj.fileTree("$JAVASOURCE_FOLDER/resources", {
+                    include '**/*'
+                }):
+                prj.fileTree("$JAVASOURCE_FOLDER/resources", {
+                    include '**/*'
+                    exclude 'tests/**/*'
+                })
 
         doLast() {
-            migrateFiles prj, files, target
+            moveFiles prj, files, target
         }
     }
 
 
-    def migrateFiles_test_java = task('migrateFiles_test_java') {
+    def migrate_test_java = task('migrate_test_java') {
         def target = 'src/test/java'
 
         def files = prj.fileTree "$JAVASOURCE_FOLDER/tests", {
@@ -40,7 +45,7 @@ allprojects { prj ->
         }
 
         doLast() {
-            migrateFiles prj, files, target
+            moveFiles prj, files, target
 
             FileTree testFiles = prj.fileTree target, {
                 include '**/*.java'
@@ -48,6 +53,34 @@ allprojects { prj ->
 
             replaceToken testFiles.files, /import\s+tests\.com\./,  'import com.'
             replaceToken testFiles.files, /package\s+tests\.com\./, 'package com.'
+        }
+    }
+
+
+    def migrate_test_resources = task('migrate_test_resources') {
+
+        onlyIf {!prj.name.endsWith('_test')}
+
+        def target = 'src/test/resources/resources'
+
+        def files = prj.fileTree "$JAVASOURCE_FOLDER/resources/tests", {
+            include '**/*'
+        }
+
+        doLast() {
+            moveFiles prj, files, target
+        }
+    }
+
+
+    def migrate_genmodel = task('mirgrate_genmodel') {
+
+        def files = prj.fileTree "model", {
+            include '**/*.genmodel'
+        }
+
+        doLast() {
+            replaceToken files.files, JAVASOURCE_FOLDER, 'src/test/java'
         }
     }
 
@@ -65,17 +98,21 @@ allprojects { prj ->
         }
     }
 
-    migrateFiles_main_java.dependsOn      migrateFiles_main_resources
-    migrateFiles_main_resources.dependsOn migrateFiles_test_java
+    migrate_genmodel.dependsOn            migrate_main_java
+    migrate_main_java.dependsOn      migrate_main_resources
+    migrate_main_resources.dependsOn migrate_test_java
+    migrate_test_java.dependsOn      migrate_test_resources
 
-    migrate.dependsOn migrateFiles_main_java
-    migrate.dependsOn migrateFiles_main_resources
-    migrate.dependsOn migrateFiles_test_java
+    migrate.dependsOn migrate_main_java
+    migrate.dependsOn migrate_main_resources
+    migrate.dependsOn migrate_test_java
+    migrate.dependsOn migrate_test_resources
+    migrate.dependsOn migrate_genmodel
 }
 
 
 
-def migrateFiles(Project prj, files, target) {
+def moveFiles(Project prj, files, target) {
     files.visit { FileTreeElement fte ->
         if (!fte.isDirectory() || fte.file.listFiles().length == 0) {
 
@@ -85,13 +122,13 @@ def migrateFiles(Project prj, files, target) {
 
             def dest = "$target/${fte.relativePath.pathString}"
 
-            moveFiles prj, source, dest
+            move prj, source, dest
         }
     }
 }
 
 
-def moveFiles(Project prj, source, dest) {
+def move(Project prj, source, dest) {
 
     if (prj.hasProperty('MOCK_SCM')) {
         prj.copy {
@@ -100,6 +137,7 @@ def moveFiles(Project prj, source, dest) {
         }
         prj.delete source
     } else {
+        println "svn move $source $dest"
         prj.exec {
             if (System.getProperty('os.name').toLowerCase().contains('windows')) {
                 commandLine 'cmd', '/c', 'svn', 'move', '--parents', source, dest

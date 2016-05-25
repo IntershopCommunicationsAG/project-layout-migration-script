@@ -6,24 +6,40 @@ In order to support several other standard gradle plugins, it is recommended to 
 layout for ish cartridges too.
 
 These project provides a migration script, that supports the migration of existing cartridges.
-The following steps will be done:
 
-* files from the javasource folder will be moved into into the recommended layout
-  with using the `svn move` command:
+## migration steps
 
-|target folder          | files                                                   |
-|-----------------------|---------------------------------------------------------|
-| src/main/java         | `javasource/**/*.java { exclude 'tests/com/**/*' }`     |
-| src/main/resources    | `javasource/resources/**/*`                             |
-| src/test/java         | `javasource/tests/com/**/*.java`                        |
+### moving source files project files into related standard folders:
 
-* package names within unit tests will be corrected.
+|target folder                                            | files                                                     |
+|---------------------------------------------------------|-----------------------------------------------------------|
+| src/main/java                                           | `javasource/**/*.java { exclude 'tests/com/**/*' }`       |
+| src/test/java                                           | `javasource/tests/com/**/*.java`                          |
+| src/main/resources/resources (except _test cartidges)   | `javasource/resources/**/* { exclude 'tests/**/*' }`      |
+| src/main/resources/resources ( _test cartridges )       | `javasource/resources/**/*                                |
+| src/test/resources/resources (except _test cartidges)   | `javasource/resources/tests/**/*`                         |
+
+* The distribution of the resources is just an heuristic. Manuall adaptions may be required.
+
+* The leading 'resources' folder for all resources is required in order to keep references within java source files to
+resources valid.
+
+
+### renaming test packages
+
+* Package names of unit tests classes will be adapted (`tests.com.*` => `com.*`)
+* Related  references within test classes are changed.
+
+### further replaced tokens
+
+| file pattern        | token         | replaced by     |
+|---------------------|---------------|-----------------|
+| model/**/*.genmodel | `/javasource/`| `src/main/java` |
 
 
 ## preconditions
 
 `com.intershop.build.gradle:ish-component-plugin:2.11`
-
 
 ## usage
 
