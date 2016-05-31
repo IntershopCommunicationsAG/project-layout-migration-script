@@ -85,6 +85,16 @@ allprojects { prj ->
     }
 
 
+    def migrate_javacc = task('migrate_javacc') {
+        doLast() {
+            File buildFile = new File(prj.projectDir, 'build.gradle')
+
+            def content = buildFile.text.replaceAll(/javasource(.*\.jjt?)/, {all, path -> "src/main/java$path"})
+
+            buildFile.write content
+        }
+    }
+
     def migrate = task('migrate') {
         onlyIf {new File(prj.projectDir, JAVASOURCE_FOLDER).exists()}
 
@@ -97,8 +107,8 @@ allprojects { prj ->
             deleteFiles prj, JAVASOURCE_FOLDER
         }
     }
-
-    migrate_genmodel.dependsOn            migrate_main_java
+    migrate_javacc.dependsOn migrate_genmodel
+    migrate_genmodel.dependsOn       migrate_main_java
     migrate_main_java.dependsOn      migrate_main_resources
     migrate_main_resources.dependsOn migrate_test_java
     migrate_test_java.dependsOn      migrate_test_resources
@@ -108,6 +118,7 @@ allprojects { prj ->
     migrate.dependsOn migrate_test_java
     migrate.dependsOn migrate_test_resources
     migrate.dependsOn migrate_genmodel
+    migrate.dependsOn migrate_javacc
 }
 
 
@@ -168,7 +179,6 @@ def replaceToken(Set<File> files, def pattern, def replaceWith) {
     files.each {f ->
 
         def content = f.text
-                .replaceAll(pattern, replaceWith)
                 .replaceAll(pattern, replaceWith)
 
         f.write content
