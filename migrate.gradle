@@ -5,75 +5,72 @@ gradle.startParameter.maxWorkerCount = 1
 
 allprojects { prj ->
 
-    def migrate_main_java = task('migrate_main_java') {
-        def target = 'src/main/java'
+    task('migrateSrcStructure_main_java') {
 
         def files = prj.fileTree JAVASOURCE_FOLDER, {
-            include '**/*'
-            exclude 'tests/com/**/*'
+            include '**/*.java'
+
+            if (prj.name.endsWith('_test')) {
+                exclude 'tests/com/**/*.java'
+            }
+            else {
+                exclude 'tests/**/*.java'
+            }
         }
 
         doLast() {
-            moveFiles prj, files, target
+            moveFiles prj, files, 'src/main/java'
         }
     }
 
+    task('migrateSrcStructure_test_java') {
 
-    def migrate_main_resources = task('migrate_main_resources') {
-        def target = 'src/main/resources/resources'
+        def files = prj.fileTree "$JAVASOURCE_FOLDER", {
+            if (prj.name.endsWith('_test')) {
+                include 'tests/com/**/*.java'
+            }
+            else {
+                include 'tests/**/*.java'
+            }
+        }
+
+        doLast() {
+            moveFiles prj, files, 'src/test/java'
+        }
+    }
+
+    task('migrateSrcStructure_main_res') {
 
         def files = prj.name.endsWith('_test') ?
-                prj.fileTree("$JAVASOURCE_FOLDER/resources", {
+                prj.fileTree("$JAVASOURCE_FOLDER", {
                     include '**/*'
+                    exclude '**/*.java'
                 }):
-                prj.fileTree("$JAVASOURCE_FOLDER/resources", {
+                prj.fileTree("$JAVASOURCE_FOLDER", {
                     include '**/*'
-                    exclude 'tests/**/*'
+                    exclude '**/*.java'
+                    exclude 'resources/tests/**/*'
                 })
 
         doLast() {
-            moveFiles prj, files, target
+            moveFiles prj, files, 'src/main/resources'
         }
     }
 
-
-    def migrate_test_java = task('migrate_test_java') {
-        def target = 'src/test/java'
-
-        def files = prj.fileTree "$JAVASOURCE_FOLDER/tests", {
-            include 'com/**/*'
-        }
-
-        doLast() {
-            moveFiles prj, files, target
-
-            FileTree testFiles = prj.fileTree target, {
-                include '**/*.java'
-            }
-
-            replaceToken testFiles.files, /import\s+tests\.com\./,  'import com.'
-            replaceToken testFiles.files, /package\s+tests\.com\./, 'package com.'
-        }
-    }
-
-
-    def migrate_test_resources = task('migrate_test_resources') {
+    task('migrateSrcStructure_test_res') {
 
         onlyIf {!prj.name.endsWith('_test')}
 
-        def target = 'src/test/resources/resources'
-
-        def files = prj.fileTree "$JAVASOURCE_FOLDER/resources/tests", {
-            include '**/*'
+        def files = prj.fileTree "$JAVASOURCE_FOLDER", {
+            include 'resources/tests/**/*'
         }
 
         doLast() {
-            moveFiles prj, files, target
+            moveFiles prj, files, 'src/test/resources'
         }
     }
 
-
-    def migrate_genmodel = task('mirgrate_genmodel') {
+    task('migrate_genmodel') {
 
         def files = prj.fileTree "model", {
             include '**/*.genmodel'
@@ -84,18 +81,26 @@ allprojects { prj ->
         }
     }
 
+    task('migrate_javacc') {
+        File buildFile = new File(prj.projectDir, 'build.gradle')
 
-    def migrate_javacc = task('migrate_javacc') {
+        onlyIf {buildFile.exists()}
+
         doLast() {
-            File buildFile = new File(prj.projectDir, 'build.gradle')
-
-            def content = buildFile.text.replaceAll(/javasource(.*\.jjt?)/, {all, path -> "src/main/java$path"})
+            def content = buildFile.text.replaceAll(/javasource(.*\.jjt?)/, {all, path -> "src/main/resources$path"})
 
             buildFile.write content
         }
     }
 
-    def migrate = task('migrate') {
+    task('migrate') {
+        dependsOn   migrateSrcStructure_main_java,
+                    migrateSrcStructure_test_java,
+                    migrateSrcStructure_main_res,
+                    migrateSrcStructure_test_res,
+                    migrate_genmodel,
+                    migrate_javacc
+
         onlyIf {new File(prj.projectDir, JAVASOURCE_FOLDER).exists()}
 
         doLast() {
@@ -107,21 +112,32 @@ allprojects { prj ->
             deleteFiles prj, JAVASOURCE_FOLDER
         }
     }
-    migrate_javacc.dependsOn migrate_genmodel
-    migrate_genmodel.dependsOn       migrate_main_java
-    migrate_main_java.dependsOn      migrate_main_resources
-    migrate_main_resources.dependsOn migrate_test_java
-    migrate_test_java.dependsOn      migrate_test_resources
 
-    migrate.dependsOn migrate_main_java
-    migrate.dependsOn migrate_main_resources
-    migrate.dependsOn migrate_test_java
-    migrate.dependsOn migrate_test_resources
-    migrate.dependsOn migrate_genmodel
-    migrate.dependsOn migrate_javacc
+    def migrate_test_java = task('migrate_test_java') {
+        dependsOn migrate
+
+        def files = prj.fileTree "$JAVASOURCE_FOLDER", {
+            include 'tests/com/**/*.java'
+        }
+
+        doLast() {
+            moveFiles prj, files, 'src/test/java'
+        }
+    }
+
+    task 'renameTestPackages' {
+        doLast() {
+            FileTree testFiles = prj.fileTree 'src/test/java/tests', {
+                include 'com/**/*.java'
+            }
+
+            replaceToken testFiles.files, /import\s+tests\.com\./,  'import com.'
+            replaceToken testFiles.files, /package\s+tests\.com\./, 'package com.'
+
+            moveFiles prj, testFiles, 'src/test/java'
+        }
+    }
 }
-
-
 
 def moveFiles(Project prj, files, target) {
     files.visit { FileTreeElement fte ->

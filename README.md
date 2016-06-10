@@ -7,34 +7,43 @@ layout for ish cartridges too.
 
 These project provides a migration script, that supports the migration of existing cartridges.
 
-## migration steps
+## migration to a standard project layer
 
 ### moving source files project files into related standard folders:
 
-|target folder                                            | files                                                     |
-|---------------------------------------------------------|-----------------------------------------------------------|
-| src/main/java                                           | `javasource/**/*.java { exclude 'tests/com/**/*' }`       |
-| src/test/java                                           | `javasource/tests/com/**/*.java`                          |
-| src/main/resources/resources (except _test cartidges)   | `javasource/resources/**/* { exclude 'tests/**/*' }`      |
-| src/main/resources/resources ( _test cartridges )       | `javasource/resources/**/*                                |
-| src/test/resources/resources (except _test cartidges)   | `javasource/resources/tests/**/*`                         |
+#### "non-test" cartridges (!name.endsWith("_test"))
 
-* The distribution of the resources is just an heuristic. Manuall adaptions may be required.
+|target folder       | files                                                               |
+|--------------------|---------------------------------------------------------------------|
+| src/main/java      | `javasource/**/*.java { exclude 'tests/**/*' }`                     |
+| src/test/java      | `javasource/tests/**/*.java`                                        |
+| src/main/resources | `javasource/**/* { exclude '**/*.java', 'resources/tests/**/*' }`   |
+| src/test/resources | `javasource/resources/tests/**/*`                                   |
+
+
+#### "test" cartridges (name.endsWith("_test"))
+
+|target folder       | files                                                               |
+|--------------------|---------------------------------------------------------------------|
+| src/main/java      | `javasource/**/*.java { exclude 'tests/com/**/*' }`                 |
+| src/test/java      | `javasource/tests/com/**/*.java`                                    |
+| src/main/resources | `javasource/**/* { exclude '**/*.java'}`                            |
+| src/test/resources |                                                                     |
+
+#### notes:
+
+* The distribution of the resources is just an heuristic. Manual adaptions may be required.
 
 * The leading 'resources' folder for all resources is required in order to keep references within java source files to
 resources valid.
 
 
-### renaming test packages
+### further file adaptions
 
-* Package names of unit tests classes will be adapted (`tests.com.*` => `com.*`)
-* Related  references within test classes are changed.
-
-### further replaced tokens
-
-| file pattern        | token         | replaced by     |
-|---------------------|---------------|-----------------|
-| model/**/*.genmodel | `/javasource/`| `src/main/java` |
+|                      | file pattern         | token                  | replaced by                |
+|----------------------|---------------------|-------------------------|----------------------------|
+| adapt genmodel's     | model/**/*.genmodel | `/javasource/`          | `src/main/java`            |
+| javacc configuration | build.gradle        | `/javasource(.*\.jj?/`  | `src/main/resources/$path` |
 
 
 ## preconditions
