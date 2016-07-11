@@ -169,7 +169,7 @@ def move(Project prj, source, dest) {
             if (System.getProperty('os.name').toLowerCase().contains('windows')) {
                 commandLine 'cmd', '/c', 'svn', 'move', '--parents', source, dest
             } else {
-                commandLine 'sh', '-c', 'svn', 'move', '--parents', source, dest
+                commandLine 'sh', '-c', "svn move --parents $source $dest"
             }
         }
     }
@@ -184,7 +184,7 @@ def deleteFiles(Project prj, path) {
             if (System.getProperty('os.name').toLowerCase().contains('windows')) {
                 commandLine 'cmd', '/c', 'svn', 'delete', path
             } else {
-                commandLine 'sh', '-c', 'svn', 'delete', path
+                commandLine 'sh', '-c', "svn delete $path"
             }
         }
     }
