@@ -7,6 +7,8 @@ allprojects { prj ->
 
     task('migrateSrcStructure_main_java') {
 
+        onlyIf {new File(prj.projectDir, JAVASOURCE_FOLDER).exists()}
+
         def files = prj.fileTree JAVASOURCE_FOLDER, {
             include '**/*.java'
 
@@ -19,11 +21,13 @@ allprojects { prj ->
         }
 
         doLast() {
-            moveFiles prj, files, 'src/main/java'
+            moveFiles prj, JAVASOURCE_FOLDER, 'src/main/java', files
         }
     }
 
     task('migrateSrcStructure_test_java') {
+
+        onlyIf {new File(prj.projectDir, JAVASOURCE_FOLDER).exists()}
 
         def files = prj.fileTree "$JAVASOURCE_FOLDER", {
             if (prj.name.endsWith('_test')) {
@@ -35,11 +39,13 @@ allprojects { prj ->
         }
 
         doLast() {
-            moveFiles prj, files, 'src/test/java'
+            moveFiles prj, JAVASOURCE_FOLDER, 'src/test/java', files
         }
     }
 
     task('migrateSrcStructure_main_res') {
+
+        onlyIf {new File(prj.projectDir, JAVASOURCE_FOLDER).exists()}
 
         def files = prj.name.endsWith('_test') ?
                 prj.fileTree("$JAVASOURCE_FOLDER", {
@@ -53,12 +59,13 @@ allprojects { prj ->
                 })
 
         doLast() {
-            moveFiles prj, files, 'src/main/resources'
+            moveFiles prj, JAVASOURCE_FOLDER, 'src/main/resources', files
         }
     }
 
     task('migrateSrcStructure_test_res') {
 
+        onlyIf {new File(prj.projectDir, JAVASOURCE_FOLDER).exists()}
         onlyIf {!prj.name.endsWith('_test')}
 
         def files = prj.fileTree "$JAVASOURCE_FOLDER", {
@@ -66,7 +73,7 @@ allprojects { prj ->
         }
 
         doLast() {
-            moveFiles prj, files, 'src/test/resources'
+            moveFiles prj, JAVASOURCE_FOLDER, 'src/test/resources', files
         }
     }
 
@@ -104,9 +111,24 @@ allprojects { prj ->
         onlyIf {new File(prj.projectDir, JAVASOURCE_FOLDER).exists()}
 
         doLast() {
-            prj.fileTree(JAVASOURCE_FOLDER).visit { FileTreeElement fte ->
-                if(!fte.isDirectory())
-                    throw new GradleException("some files still not migrated. i.e: ${fte.relativePath}")
+
+            // check, if all files were migrated
+            def migrated = []
+
+            [prj.fileTree('src/main/java'),
+             prj.fileTree('src/main/resources'),
+             prj.fileTree('src/test/java'),
+             prj.fileTree('src/test/resources')
+            ].each {
+                it.visit {FileTreeElement fte ->
+                    migrated += fte.relativePath.pathString
+                }
+            }
+
+            prj.fileTree(JAVASOURCE_FOLDER).visit {FileTreeElement fte ->
+                if (!fte.isDirectory() && !migrated.contains(fte.relativePath.pathString)) {
+                    throw new GradleException("some file are not migrated: ${fte.relativePath.pathString}")
+                }
             }
 
             deleteFiles prj, JAVASOURCE_FOLDER
@@ -121,41 +143,62 @@ allprojects { prj ->
         }
 
         doLast() {
-            moveFiles prj, files, 'src/test/java'
+            moveFiles prj, JAVASOURCE_FOLDER, 'src/test/java', files
         }
     }
+}
 
-    task 'renameTestPackages' {
-        doLast() {
-            FileTree testFiles = prj.fileTree 'src/test/java/tests', {
-                include 'com/**/*.java'
+
+def deleteFiles(Project prj, String path) {
+    svnDelete prj, path
+}
+
+
+def moveFiles(Project prj, src, target, files) {
+    File targetDir = new File(prj.projectDir, target)
+
+    if (!targetDir.exists()) {
+        targetDir.parentFile.mkdirs()
+
+        svnCopy prj, src, target
+    } else {
+        files.visit { FileTreeElement fte ->
+            if (!(new File(targetDir, fte.relativePath.pathString).exists())) {
+
+                if (fte.isDirectory())
+                    svnCopy(prj, "$src/${fte.relativePath}", "$target/${fte.relativePath}")
+                else
+                    svnMove(prj, "$src/${fte.relativePath}", "$target/${fte.relativePath}")
             }
-
-            replaceToken testFiles.files, /import\s+tests\.com\./,  'import com.'
-            replaceToken testFiles.files, /package\s+tests\.com\./, 'package com.'
-
-            moveFiles prj, testFiles, 'src/test/java'
         }
     }
-}
 
-def moveFiles(Project prj, files, target) {
+    Set remainingFiles = []
     files.visit { FileTreeElement fte ->
-        if (!fte.isDirectory() || fte.file.listFiles().length == 0) {
+            remainingFiles += fte.relativePath
+    }
 
-            def source = fte.file.absolutePath
-                    .replace(prj.projectDir.absolutePath + File.separator, '')
-                    .replace(File.separator, '/')
-
-            def dest = "$target/${fte.relativePath.pathString}"
-
-            move prj, source, dest
+    prj.fileTree(target).visit {FileTreeElement fte ->
+        if (!remainingFiles.contains(fte.relativePath)) {
+            svnDelete prj, "$target/${fte.path}"
         }
+    }
+
+    def directories = []
+    prj.fileTree(target).visit { FileTreeElement fte ->
+        if (fte.isDirectory()) directories += fte
+    }
+
+    directories.sort({a,b -> b.relativePath <=> a.relativePath})
+
+    directories.each {FileTreeElement dir ->
+        if (dir.file.listFiles().size() == 0)
+            svnDelete prj, "$target/${dir.path}"
     }
 }
 
 
-def move(Project prj, source, dest) {
+def svnMove(Project prj, source, dest) {
 
     if (prj.hasProperty('MOCK_SCM')) {
         prj.copy {
@@ -176,10 +219,32 @@ def move(Project prj, source, dest) {
 }
 
 
-def deleteFiles(Project prj, path) {
+def svnCopy(Project prj, source, dest) {
+
+    if (prj.hasProperty('MOCK_SCM')) {
+        prj.copy {
+            from source
+            into dest
+        }
+        prj.delete source
+    } else {
+        println "svn copy $source $dest"
+        prj.exec {
+            if (System.getProperty('os.name').toLowerCase().contains('windows')) {
+                commandLine 'cmd', '/c', 'svn', 'copy', '--parents', source, dest
+            } else {
+                commandLine 'sh', '-c', "svn copy --parents $source $dest"
+            }
+        }
+    }
+}
+
+
+def svnDelete(Project prj, path) {
     if (prj.hasProperty('MOCK_SCM')) {
         prj.delete path
     } else {
+        println "svn delete $path"
         prj.exec {
             if (System.getProperty('os.name').toLowerCase().contains('windows')) {
                 commandLine 'cmd', '/c', 'svn', 'delete', path
