@@ -43,7 +43,7 @@ resources valid.
 |                      | file pattern         | token                  | replaced by                |
 |----------------------|---------------------|-------------------------|----------------------------|
 | adapt genmodel's     | model/**/*.genmodel | `/javasource/`          | `src/main/java`            |
-| javacc configuration | build.gradle        | `/javasource(.*\.jj?/`  | `src/main/resources/$path` |
+| javacc configuration | build.gradle        | `/javasource(.*\.jjt?)/`  | `src/main/resources/$path` |
 
 
 ## preconditions
