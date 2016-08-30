@@ -1,9 +1,9 @@
-# standard project layer support for ish cartridges
+# project layout migration script for Intershop cartridges
 
-Since version 2.11, the ish gradle tools support the standard project layout for java projects
+Since version 2.11, the Intershop gradle tools support the standard project layout for java projects
 as described in the [Gradle Documentation](https://docs.gradle.org/current/userguide/java_plugin.html).
 In order to support several other standard gradle plugins, it is recommended to use this project
-layout for ish cartridges too.
+layout for Intershop cartridges too.
 
 These project provides a migration script, that supports the migration of existing cartridges.
 
